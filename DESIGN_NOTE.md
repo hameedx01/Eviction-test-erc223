@@ -49,12 +49,19 @@ value. The [receiver section](https://eips.ethereum.org/EIPS/eip-223#receiver-me
 also permits fallback handling without that value; this implementation deliberately
 uses a stricter policy, rejecting empty or incorrect responses. A fallback that
 returns the correct encoded value can still satisfy the check.
+The trade-off is explicit acknowledgement at the cost of compatibility with
+fallback receivers that the specification permits to return no acceptance value.
 
 Second, complete balance updates before calling receiver code. Withdrawals also
 debit credit before transferring. Callbacks therefore observe updated accounting;
 a failure rolls back all associated changes. The receiver authenticates the token
 caller to prevent forged deposits, and withdrawal checks the transfer's Boolean
 result. Tests exercise nested transfers and attempts to withdraw credit twice.
+This follows the ordering required by the
+[transfer specification](https://eips.ethereum.org/EIPS/eip-223#transferaddress-uint-bytes).
+The implementation permits callbacks to forward their newly received tokens;
+it does not prohibit reentrancy generally. Each receiving application must protect
+its own accounting before making external calls.
 
 Third, use `to.code.length` to decide whether to invoke the hook. This is simple,
 but cannot identify contracts during construction or before deployment. A test
@@ -62,6 +69,20 @@ demonstrates this limit. Acceptance also cannot prove that a receiver provides
 safe recovery, and transfers to an unintended ordinary wallet remain possible.
 Initial supply allocation to the deployer is separate from transfers and does not
 invoke a hook.
+
+**Meaningful coverage and failure cases.** Tests check resulting balances, deposit
+credits, callback arguments, events, and rollback, rather than only successful
+return values. Negative cases include missing hooks, explicit rejection, wrong
+acceptance values, empty fallback responses, insufficient funds, zero destinations,
+forged deposits, untrusted tokens, and excessive withdrawals. Callback tests
+verify that an outer rejection reverses a nested transfer and that a withdrawal
+cannot spend the same credit twice. The two fuzz tests exercise supply conservation
+and deposit-withdrawal round trips. The constructor test documents a known limit;
+it does not demonstrate that the limit has been eliminated. See the
+[test guide](test/README.md) and [test implementation](test/ERC223Token.t.sol).
+Passing 37 tests is not a line or branch coverage percentage, a security audit,
+or proof that all possible receiver behaviour is safe. No gas benchmark was run,
+so this project does not claim a measured gas saving over ERC-20.
 
 **Validation and AI disclosure.** The last verified Foundry run passed 37 tests,
 including two fuzz tests with 256 generated cases each. Both overloads are tested
